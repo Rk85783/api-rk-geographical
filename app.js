@@ -16,6 +16,46 @@ mongoose.connect(process.env.MONGO_URI).then(() => {
   process.exit(1);
 })
 
+// -----> configs-list
+app.get("/api/configs-list", async (req, res) => {
+  try {
+    const [
+      topCompaniesByRegions,
+      topCompaniesByShipmentTypes,
+      truckTypes,
+      shipmentTypes,
+      specializedServices,
+      freights,
+      safetyRatings,
+      operations,
+      insuranceMinimum
+    ] = await Promise.all([
+      mongoose.connection.db.collection("top-companies-by-region").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("top-companies-by-shipment-type").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("truck-type").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("shipment-type").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("specialized-service").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("freight").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("safety-rating").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("operation").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("insurance-minimum").find().sort({ id: 1 }).toArray(),
+    ]);
+    res.status(200).json({
+      topCompaniesByRegions,
+      topCompaniesByShipmentTypes,
+      truckTypes,
+      shipmentTypes,
+      specializedServices,
+      freights,
+      safetyRatings,
+      operations,
+      insuranceMinimum
+    });
+  } catch (error) {
+    res.status(500).json(error);
+  }
+});
+
 // -----> Countries
 app.get("/api/countries", async (req, res) => {
   try {
