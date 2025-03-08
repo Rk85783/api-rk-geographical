@@ -28,7 +28,8 @@ app.get("/api/configs-list", async (req, res) => {
       freights,
       safetyRatings,
       operations,
-      insuranceMinimum
+      insuranceMinimum,
+      authorityMaintained
     ] = await Promise.all([
       mongoose.connection.db.collection("top-companies-by-region").find().sort({ id: 1 }).toArray(),
       mongoose.connection.db.collection("top-companies-by-shipment-type").find().sort({ id: 1 }).toArray(),
@@ -39,6 +40,7 @@ app.get("/api/configs-list", async (req, res) => {
       mongoose.connection.db.collection("safety-rating").find().sort({ id: 1 }).toArray(),
       mongoose.connection.db.collection("operation").find().sort({ id: 1 }).toArray(),
       mongoose.connection.db.collection("insurance-minimum").find().sort({ id: 1 }).toArray(),
+      mongoose.connection.db.collection("authority-maintained").find().sort({ id: 1 }).toArray(),
     ]);
     res.status(200).json({
       topCompaniesByRegions,
@@ -49,7 +51,8 @@ app.get("/api/configs-list", async (req, res) => {
       freights,
       safetyRatings,
       operations,
-      insuranceMinimum
+      insuranceMinimum,
+      authorityMaintained
     });
   } catch (error) {
     res.status(500).json(error);
