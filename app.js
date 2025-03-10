@@ -2,19 +2,21 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+import connectDB from "./config/db.config.js";
+import User from "./models/User.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { authenticate, authorize } from "./middlewares/auth.middleware.js";
 
 const app = express();
 
+// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-await mongoose.connect(process.env.MONGO_URI).then(() => {
-  console.log("Database connected!")
-}).catch((err) => {
-  console.log(err);
-  process.exit(1);
-})
+// Database Connection
+connectDB();
 
 // -----> configs-list
 app.get("/api/configs-list", async (req, res) => {
@@ -171,18 +173,112 @@ app.get("/api/carriers", async (req, res) => {
 app.get("/api/carriers/:carrierPkId", async (req, res) => {
   try {
     const { carrierPkId } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(carrierPkId)) {
       return res.status(400).json({ success: false, message: "Invalid carrier ID format" });
     }
 
-    const carrier = await mongoose.connection.db.collection("carriers").findOne({ 
+    const carrier = await mongoose.connection.db.collection("carriers").findOne({
       _id: new mongoose.Types.ObjectId(carrierPkId)
     });
 
     if (!carrier) return res.status(404).json({ success: false, message: "Carrier not found" });
 
     res.status(200).json({ success: true, message: "Carrier details fetched successfully", carrier });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Register
+app.post("/api/auth/register", async (req, res) => {
+  const { firstName, lastName, email, password, role, dotNumber } = req.body;
+
+  // Start a new session for the transaction
+  const session = await mongoose.startSession();
+
+  try {
+    // Start transaction
+    session.startTransaction();
+
+    const existingUser = await User.findOne({ email }).session(session);
+    if (existingUser) {
+      await session.abortTransaction();
+      return res.status(400).json({ success: false, message: "User already exists" });
+    }
+
+    const newUser = await User.create([{
+      firstName,
+      lastName,
+      email,
+      password: bcrypt.hashSync(password, 10),
+      role
+    }], { session });
+
+    if (role === 'carrier') {
+      if (!dotNumber) {
+        await session.abortTransaction();
+        return res.status(400).json({ success: false, message: "Please provide dotNumber" });
+      }
+
+      const carrierExists = await mongoose.connection.db.collection("carriers")
+        .findOne({ dotNumber }, { session });
+
+      if (!carrierExists) {
+        await session.abortTransaction();
+        return res.status(400).json({ success: false, message: "Invalid DOT number" });
+      }
+
+      await mongoose.connection.db.collection("carriers").updateOne(
+        { dotNumber },
+        {
+          $set: {
+            email,
+            registrationDateTime: new Date(),
+            userId: new mongoose.Types.ObjectId(newUser[0]._id)
+          }
+        },
+        { session }
+      );
+    }
+
+    // Commit the transaction
+    await session.commitTransaction();
+
+    res.status(201).json({ success: true, message: "You are successfully registered" });
+  } catch (error) {
+    // Abort transaction on error
+    await session.abortTransaction();
+    console.log(error);
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  } finally {
+    // End session
+    session.endSession();
+  }
+});
+
+// -----> Login
+app.post("/api/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email }).select('+password').lean();
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+
+    if (!bcrypt.compareSync(password, user.password)) res.status(400).json({ success: false, message: "Email or Password is Incorrect" });
+    delete user.password
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.status(200).json({ success: true, message: "You are successfully logged in", token });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.get("/api/auth/profile", authenticate, authorize(["admin", "shipper", "carrier"]), async (req, res) => {
+  try {
+    const user = req.user;
+    res.status(200).json({ success: true, message: "User details fetched successfully", user });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
