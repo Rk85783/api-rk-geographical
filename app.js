@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-mongoose.connect(process.env.MONGO_URI).then(() => {
+await mongoose.connect(process.env.MONGO_URI).then(() => {
   console.log("Database connected!")
 }).catch((err) => {
   console.log(err);
@@ -164,6 +164,27 @@ app.get("/api/carriers", async (req, res) => {
     res.status(200).json({ totalPages, totalCount, currentPage: parseInt(page), data });
   } catch (error) {
     res.status(500).json(error);
+  }
+});
+
+// -----> Carrier Profile
+app.get("/api/carriers/:carrierPkId", async (req, res) => {
+  try {
+    const { carrierPkId } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(carrierPkId)) {
+      return res.status(400).json({ success: false, message: "Invalid carrier ID format" });
+    }
+
+    const carrier = await mongoose.connection.db.collection("carriers").findOne({ 
+      _id: new mongoose.Types.ObjectId(carrierPkId)
+    });
+
+    if (!carrier) return res.status(404).json({ success: false, message: "Carrier not found" });
+
+    res.status(200).json({ success: true, message: "Carrier details fetched successfully", carrier });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
 
