@@ -5,7 +5,9 @@ const userSchema = new Schema({
   lastName: String,
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
-  role: { type: String, enum: ["admin", "carrier", "shipper", "broker", "dispatcher", "broker"], required: true }
+  role: { type: String, enum: ["admin", "user", "carrier", "shipper", "broker", "dispatcher", "broker"], default: "user" },
+  emailOtp: Number,
+  isEmailVerified: { type: Boolean, default: false }
 }, { timestamps: true });
 
 const User = model("User", userSchema);

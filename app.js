@@ -7,6 +7,10 @@ import User from "./models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { authenticate, authorize } from "./middlewares/auth.middleware.js";
+import { sendMail } from "./services/email.service.js";
+import { VERIFICATION_MAIL } from "./config/email.config.js";
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
@@ -14,6 +18,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.set("view engine", "ejs");
+app.set('views', path.resolve(__dirname, 'views'));
 
 // Database Connection
 connectDB();
@@ -190,70 +201,144 @@ app.get("/api/carriers/:carrierPkId", async (req, res) => {
   }
 });
 
-// -----> Register
-app.post("/api/auth/register", async (req, res) => {
-  const { firstName, lastName, email, password, role, dotNumber } = req.body;
+// -----> Register -- old
+// app.post("/api/auth/register", async (req, res) => {
+//   const { firstName, lastName, email, password, role, dotNumber } = req.body;
 
-  // Start a new session for the transaction
-  const session = await mongoose.startSession();
+//   // Start a new session for the transaction
+//   const session = await mongoose.startSession();
+
+//   try {
+//     // Start transaction
+//     session.startTransaction();
+
+//     const existingUser = await User.findOne({ email }).session(session);
+//     if (existingUser) {
+//       await session.abortTransaction();
+//       return res.status(400).json({ success: false, message: "User already exists" });
+//     }
+
+//     const newUser = await User.create([{
+//       firstName,
+//       lastName,
+//       email,
+//       password: bcrypt.hashSync(password, 10),
+//       role
+//     }], { session });
+
+//     if (role === 'carrier') {
+//       if (!dotNumber) {
+//         await session.abortTransaction();
+//         return res.status(400).json({ success: false, message: "Please provide dotNumber" });
+//       }
+
+//       const carrierExists = await mongoose.connection.db.collection("carriers")
+//         .findOne({ dotNumber }, { session });
+
+//       if (!carrierExists) {
+//         await session.abortTransaction();
+//         return res.status(400).json({ success: false, message: "Invalid DOT number" });
+//       }
+
+//       await mongoose.connection.db.collection("carriers").updateOne(
+//         { dotNumber },
+//         {
+//           $set: {
+//             email,
+//             registrationDateTime: new Date(),
+//             userId: new mongoose.Types.ObjectId(newUser[0]._id)
+//           }
+//         },
+//         { session }
+//       );
+//     }
+
+//     // Commit the transaction
+//     await session.commitTransaction();
+
+//     res.status(201).json({ success: true, message: "You are successfully registered" });
+//   } catch (error) {
+//     // Abort transaction on error
+//     await session.abortTransaction();
+//     console.log(error);
+//     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+//   } finally {
+//     // End session
+//     session.endSession();
+//   }
+// });
+
+// -----> Register -- new
+app.post("/api/auth/register", async (req, res) => {
+  const { firstName, lastName, email, password } = req.body;
 
   try {
-    // Start transaction
-    session.startTransaction();
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ success: false, message: "User already exists" });
 
-    const existingUser = await User.findOne({ email }).session(session);
-    if (existingUser) {
-      await session.abortTransaction();
-      return res.status(400).json({ success: false, message: "User already exists" });
-    }
-
-    const newUser = await User.create([{
+    await User.create({
       firstName,
       lastName,
       email,
-      password: bcrypt.hashSync(password, 10),
-      role
-    }], { session });
-
-    if (role === 'carrier') {
-      if (!dotNumber) {
-        await session.abortTransaction();
-        return res.status(400).json({ success: false, message: "Please provide dotNumber" });
-      }
-
-      const carrierExists = await mongoose.connection.db.collection("carriers")
-        .findOne({ dotNumber }, { session });
-
-      if (!carrierExists) {
-        await session.abortTransaction();
-        return res.status(400).json({ success: false, message: "Invalid DOT number" });
-      }
-
-      await mongoose.connection.db.collection("carriers").updateOne(
-        { dotNumber },
-        {
-          $set: {
-            email,
-            registrationDateTime: new Date(),
-            userId: new mongoose.Types.ObjectId(newUser[0]._id)
-          }
-        },
-        { session }
-      );
-    }
-
-    // Commit the transaction
-    await session.commitTransaction();
+      password: bcrypt.hashSync(password, 10)
+    });
 
     res.status(201).json({ success: true, message: "You are successfully registered" });
   } catch (error) {
-    // Abort transaction on error
-    await session.abortTransaction();
-    console.log(error);
     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
-  } finally {
-    // End session
-    session.endSession();
+  }
+});
+
+// -----> Resend Verification Mail
+app.get("/api/auth/resend-verification-mail", authenticate, authorize(["user"]), async (req, res) => {
+  const { _id, email } = req.user;
+  try {
+    const user = await User.findOne({ _id, email });
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+    if (user.isEmailVerified) return res.status(400).json({ success: false, message: "Email is already verified" });
+
+    const emailData = {
+      recieverEmail: email,
+      subject: `Verify Your Email on ${process.env.APP_NAME}`,
+      emailTemplatePath: VERIFICATION_MAIL,
+      templateData: {
+        appName: process.env.APP_NAME,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${email}&id=${_id}`
+      }
+    }
+    console.dir(emailData, { depth: null });
+    sendMail(emailData);
+
+    res.status(200).json({ success: true, message: "Verificaiton mail resend successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+// -----> Verify Email
+app.get("/api/auth/verify-email", authenticate, authorize(["user"]), async (req, res) => {
+  const { email, id } = req.query;
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid ID format" });
+    }
+
+    if (email != req.user.email || id != req.user._id) return res.status(400).json({ success: false, message: "Verification details and logged in users details not match" });
+
+    const user = await User.findOne({ email, _id: id });
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+    if (user.isEmailVerified) return res.status(400).json({ success: false, message: "Email is already verified" });
+
+    user.isEmailVerified = true;
+    await user.save();
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.status(200).json({ success: true, message: "Email verified successfully", token, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
 });
 
@@ -269,13 +354,14 @@ app.post("/api/auth/login", async (req, res) => {
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    res.status(200).json({ success: true, message: "You are successfully logged in", token });
+    res.status(200).json({ success: true, message: "You are successfully logged in", token, user });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
 
-app.get("/api/auth/profile", authenticate, authorize(["admin", "shipper", "carrier"]), async (req, res) => {
+// -----> Profile
+app.get("/api/auth/profile", authenticate, authorize(["user", "shipper", "carrier"]), async (req, res) => {
   try {
     const user = req.user;
     res.status(200).json({ success: true, message: "User details fetched successfully", user });
