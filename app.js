@@ -305,7 +305,7 @@ app.post("/api/auth/register", async (req, res) => {
 });
 
 // -----> Resend Verification Mail
-app.get("/api/auth/resend-verification-mail", authenticate, authorize(["user"]), async (req, res) => {
+app.post("/api/auth/resend-verification-mail", authenticate, authorize(["user"]), async (req, res) => {
   const { _id, email } = req.user;
   try {
     const user = await User.findOne({ _id, email });
@@ -333,7 +333,7 @@ app.get("/api/auth/resend-verification-mail", authenticate, authorize(["user"]),
 });
 
 // -----> Verify Email
-app.get("/api/auth/verify-email", authenticate, authorize(["user"]), async (req, res) => {
+app.post("/api/auth/verify-email", authenticate, authorize(["user"]), async (req, res) => {
   const { email, id } = req.query;
   try {
     if (!mongoose.Types.ObjectId.isValid(id)) {
