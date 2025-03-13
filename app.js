@@ -334,7 +334,7 @@ app.post("/api/auth/resend-verification-mail", authenticate, authorize(["user"])
 
 // -----> Verify Email
 app.post("/api/auth/verify-email", authenticate, authorize(["user"]), async (req, res) => {
-  const { email, id } = req.query;
+  const { email, id } = req.body;
   try {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: "Invalid ID format" });
