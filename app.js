@@ -276,14 +276,29 @@ app.post("/api/auth/register", async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ success: false, message: "User already exists" });
 
-    await User.create({
+    const user = await User.create({
       firstName,
       lastName,
       email,
       password: bcrypt.hashSync(password, 10)
     });
 
-    res.status(201).json({ success: true, message: "You are successfully registered" });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    const emailData = {
+      recieverEmail: user.email,
+      subject: `Verify Your Email on ${process.env.APP_NAME}`,
+      emailTemplatePath: VERIFICATION_MAIL,
+      templateData: {
+        appName: process.env.APP_NAME,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${user.email}&id=${user._id}`
+      }
+    }
+    sendMail(emailData);
+
+    res.status(201).json({ success: true, message: "You are successfully registered", token });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
