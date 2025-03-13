@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { authenticate, authorize } from "./middlewares/auth.middleware.js";
 import { sendMail } from "./services/email.service.js";
-import { VERIFICATION_MAIL } from "./config/email.config.js";
+import { FORGOT_PASSWORD_MAIL, VERIFICATION_MAIL } from "./config/email.config.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -363,12 +363,56 @@ app.post("/api/auth/login", async (req, res) => {
     const user = await User.findOne({ email }).select('+password').lean();
     if (!user) return res.status(400).json({ success: false, message: "User not found" });
 
-    if (!bcrypt.compareSync(password, user.password)) res.status(400).json({ success: false, message: "Email or Password is Incorrect" });
+    if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ success: false, message: "Email or Password is Incorrect" });
     delete user.password
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.status(200).json({ success: true, message: "You are successfully logged in", token, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Forgot Password
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email }).lean();
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+
+    const emailData = {
+      recieverEmail: user.email,
+      subject: `Change your ${process.env.APP_NAME} password`,
+      emailTemplatePath: FORGOT_PASSWORD_MAIL,
+      templateData: {
+        appName: process.env.APP_NAME,
+        verificationLink: `${process.env.FRONTEND_URL}/reset-password?email=${user.email}&id=${user._id}`
+      }
+    }
+    sendMail(emailData);
+
+    res.status(200).json({ success: true, message: "Email reset link sent successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Reset Password  
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { id, email, password } = req.body;
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid ID format" });
+    }
+
+    const user = await User.findOne({ email, _id: id }).select('+password');
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+
+    user.password = bcrypt.hashSync(password, 10);
+    await user.save();
+
+    res.status(200).json({ success: true, message: "Password reset successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
