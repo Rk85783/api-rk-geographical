@@ -323,7 +323,6 @@ app.post("/api/auth/resend-verification-mail", authenticate, authorize(["user"])
         verificationLink: `${process.env.FRONTEND_URL}/verify?email=${email}&id=${_id}`
       }
     }
-    console.dir(emailData, { depth: null });
     sendMail(emailData);
 
     res.status(200).json({ success: true, message: "Verificaiton mail resend successfully" });
