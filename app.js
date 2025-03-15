@@ -12,6 +12,7 @@ import { FORGOT_PASSWORD_MAIL, VERIFICATION_MAIL } from "./config/email.config.j
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Shipper from "./models/Shipper.js";
+import Carrier from "./models/Carrier.js";
 
 const app = express();
 
@@ -154,7 +155,7 @@ app.get("/api/cities", async (req, res) => {
   }
 });
 
-// -----> Carriers
+// -----> Get All Carriers
 app.get("/api/carriers", async (req, res) => {
   try {
     const { page = 1, limit = 10, sort = 'dotNumber', order = 'asc', ...filters } = req.query;
@@ -182,6 +183,22 @@ app.get("/api/carriers", async (req, res) => {
 });
 
 // -----> Carrier Profile
+app.get("/api/carriers/me", authenticate, authorize(["carrier"]), async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.isEmailVerified) return res.status(404).json({ success: false, message: "Please verify email first" });
+
+    const carrier = await Carrier.findOne({ user: user._id }).populate({ path: "user", match: { role: "carrier" }, lean: true }).lean();
+    if (!carrier) return res.status(404).json({ success: false, message: "Carrier not found" });
+
+    res.status(200).json({ success: true, message: "Carrier profile detail fetched successfully", carrier });
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Get Single Carrier
 app.get("/api/carriers/:carrierPkId", async (req, res) => {
   try {
     const { carrierPkId } = req.params;
@@ -431,7 +448,7 @@ app.get("/api/auth/profile", authenticate, authorize(["user"]), async (req, res)
 
 // -----> Assign Role
 app.post("/api/auth/assign-role", authenticate, authorize(["user"]), async (req, res) => {
-  const { role, companyName, city, state, country } = req.body
+  const { role, companyName, city, state, country, dotNumber } = req.body
   try {
     const user = req.user;
     if (!user.isEmailVerified) return res.status(400).json({ success: false, message: "Please verify your email first" });
@@ -447,16 +464,24 @@ app.post("/api/auth/assign-role", authenticate, authorize(["user"]), async (req,
         state,
         country
       });
+    } else if (role === 'carrier') {
+      await Carrier.findOneAndUpdate(
+        { dotNumber },
+        {
+          user: updatedUser._id,
+        },
+        { new: true }
+      )
     }
 
-    res.status(200).json({ success: true, message: "User details udpated successfully", user });
+    res.status(200).json({ success: true, message: "User details udpated successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
 
 // -----> Shipper Profile
-app.get("/api/shippers/profile", authenticate, authorize(["shipper"]), async (req, res) => {
+app.get("/api/shippers/me", authenticate, authorize(["shipper"]), async (req, res) => {
   try {
     const user = req.user;
     if (!user.isEmailVerified) return res.status(404).json({ success: false, message: "Please verify email first" });
