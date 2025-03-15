@@ -11,6 +11,7 @@ import { sendMail } from "./services/email.service.js";
 import { FORGOT_PASSWORD_MAIL, VERIFICATION_MAIL } from "./config/email.config.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Shipper from "./models/Shipper.js";
 
 const app = express();
 
@@ -419,10 +420,51 @@ app.post("/api/auth/reset-password", async (req, res) => {
 });
 
 // -----> Profile
-app.get("/api/auth/profile", authenticate, authorize(["user", "shipper", "carrier"]), async (req, res) => {
+app.get("/api/auth/profile", authenticate, authorize(["user"]), async (req, res) => {
   try {
     const user = req.user;
     res.status(200).json({ success: true, message: "User details fetched successfully", user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Assign Role
+app.post("/api/auth/assign-role", authenticate, authorize(["user"]), async (req, res) => {
+  const { role, companyName, city, state, country } = req.body
+  try {
+    const user = req.user;
+    if (!user.isEmailVerified) return res.status(400).json({ success: false, message: "Please verify your email first" });
+
+    const updatedUser = await User.findByIdAndUpdate(user._id, { role }, { new: true });
+    if (!updatedUser) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (role === 'shipper') {
+      await Shipper.create({
+        user: updatedUser._id,
+        companyName,
+        city,
+        state,
+        country
+      });
+    }
+
+    res.status(200).json({ success: true, message: "User details udpated successfully", user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Shipper Profile
+app.get("/api/shippers/profile", authenticate, authorize(["shipper"]), async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.isEmailVerified) return res.status(404).json({ success: false, message: "Please verify email first" });
+
+    const shipper = await Shipper.findOne({ user: user._id }).populate({ path: "user", match: { role: "shipper" }, select: "firstName lastName email role", lean: true }).lean();
+    if (!shipper) return res.status(404).json({ success: false, message: "Shipper not found" });
+
+    res.status(200).json({ success: true, message: "User details fetched successfully", shipper });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
