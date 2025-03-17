@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Shipper from "./models/Shipper.js";
 import Carrier from "./models/Carrier.js";
+import List from "./models/List.js";
 
 const app = express();
 
@@ -193,7 +194,6 @@ app.get("/api/carriers/me", authenticate, authorize(["carrier"]), async (req, re
 
     res.status(200).json({ success: true, message: "Carrier profile detail fetched successfully", carrier });
   } catch (error) {
-    console.log(error)
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
@@ -507,7 +507,7 @@ app.get("/api/external/search", async (req, res) => {
     };
 
     const carriers = await Carrier.find(carrierFilterConditions)
-      .select("legalName dotNumber phyCity phyState phyCountry phyZip")
+      .select("legalName dotNumber phyCity phyState phyCountry phyZip driverTotal nbrPowerUnit")
       .sort({ dotNumber: 1 })
       .limit(5);
 
@@ -575,7 +575,7 @@ app.get("/api/external/carrier-search-for-review", async (req, res) => {
     const [totalCount, carriers] = await Promise.all([
       Carrier.countDocuments(carrierFilterConditions),
       Carrier.find(carrierFilterConditions)
-        .select("legalName dotNumber phyCity phyState phyCountry phyZip")
+        .select("legalName dotNumber phyCity phyState phyCountry phyZip driverTotal nbrPowerUnit")
         .sort({ [sort]: sortOrder })
         .skip((page - 1) * limit)
         .limit(parseInt(limit))
@@ -598,6 +598,87 @@ app.get("/api/external/carrier-search-for-review", async (req, res) => {
       message: "Internal server error",
       error: error.message,
     });
+  }
+});
+
+// ---------------> Get all lists
+app.get("/api/lists", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { carrierId } = req.query;
+  try {
+    let query = { user: user._id };
+    if (carrierId) {
+      query = { user: user._id, carriers: carrierId };
+    }
+    const lists = await List.find(query).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ success: true, message: "Lists fetched successfully", lists });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ---------------> Create a list
+app.post("/api/lists", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { name } = req.body;
+  try {
+    await List.create({ user: user._id, name });
+    res.status(200).json({ success: true, message: "New list added successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ---------------> Edit a list
+app.put("/api/lists/:id", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { id } = req.params;
+  const { name } = req.body;
+  try {
+    const updatedList = await List.findOneAndUpdate({ _id: id, user: user._id }, { $set: { name } }, { new: true }).lean();
+    if (!updatedList) return res.status(404).json({ success: false, message: "List not found" });
+    res.status(200).json({ success: true, message: "List updated successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ---------------> Delete a list
+app.delete("/api/lists/:id", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { id } = req.params;
+  try {
+    const deletedList = await List.findOneAndDelete({ _id: id, user: user._id, isPrimary: false }).lean();
+    if (!deletedList) return res.status(404).json({ success: false, message: "List not found" });
+    res.status(200).json({ success: true, message: "List deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ---------------> Add a carrier into a list
+app.post("/api/lists/:listId/carriers/:carrierId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id: userId } = req.user;
+  const { listId, carrierId } = req.params;
+  try {
+    const updatedList = await List.findOneAndUpdate({ _id: listId, user: userId }, { $addToSet: { carriers: carrierId } }, { new: true }).lean();
+    if (!updatedList) return res.status(404).json({ success: false, message: "List not found" });
+    res.status(200).json({ success: true, message: "Carrier added in list successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ---------------> Remove a carrier form a list
+app.delete("/api/lists/:listId/carriers/:carrierId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id: userId } = req.user;
+  const { listId, carrierId } = req.params;
+  try {
+    const updatedList = await List.findOneAndUpdate({ _id: listId, user: userId }, { $pull: { carriers: carrierId } }, { new: true }).lean();
+    if (!updatedList) return res.status(404).json({ success: false, message: "List not found" });
+    res.status(200).json({ success: true, message: "Carrier removed from list successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
 
