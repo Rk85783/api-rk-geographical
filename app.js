@@ -605,15 +605,57 @@ app.get("/api/external/carrier-search-for-review", async (req, res) => {
 app.get("/api/lists", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
   const user = req.user;
   const { carrierId } = req.query;
+
   try {
-    let query = { user: user._id };
-    if (carrierId) {
-      query = { user: user._id, carriers: carrierId };
-    }
-    const lists = await List.find(query).sort({ createdAt: -1 }).lean();
-    res.status(200).json({ success: true, message: "Lists fetched successfully", lists });
+    const query = carrierId
+      ? { user: user._id, carriers: new mongoose.Types.ObjectId(carrierId) }
+      : { user: user._id };
+
+    const listsWithCarrierCount = await List.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          carriersCount: { $size: "$carriers" },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Lists fetched successfully",
+      lists: listsWithCarrierCount,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+// ---------------> Get a list
+app.get("/api/lists/:listId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id: userId } = req.user;
+  const { listId } = req.params;
+  try {
+    const list = await List.findOne({ _id: listId, user: userId }).lean();
+    if (!list) return res.status(404).json({ success: false, message: "List not found" });
+
+    const carriers = await Carrier.find({ _id: { $in: list.carriers } }).lean();
+
+    res.status(200).json({
+      success: true,
+      message: "List carriers fetched successfully",
+      carriers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
 
