@@ -495,5 +495,111 @@ app.get("/api/shippers/me", authenticate, authorize(["shipper"]), async (req, re
   }
 });
 
+app.get("/api/external/search", async (req, res) => {
+  try {
+    const query = req.query.q || "";
+
+    const carrierFilterConditions = {
+      $or: [
+        { dotNumber: { $regex: query, $options: "i" } },
+        { legalName: { $regex: query, $options: "i" } },
+      ],
+    };
+
+    const carriers = await Carrier.find(carrierFilterConditions)
+      .select("legalName dotNumber phyCity phyState phyCountry phyZip")
+      .sort({ dotNumber: 1 })
+      .limit(5);
+
+    const cities = await Carrier.aggregate([
+      {
+        $match: {
+          $or: [
+            { phyCity: { $regex: query, $options: "i" } },
+            { phyState: { $regex: query, $options: "i" } },
+            { phyCountry: { $regex: query, $options: "i" } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: {
+            city: "$phyCity",
+            state: "$phyState",
+            country: "$phyCountry",
+          },
+          zipCodes: { $push: "$phyZip" },
+        },
+      },
+      {
+        $project: {
+          city: "$_id.city",
+          state: "$_id.state",
+          country: "$_id.country",
+          zipCodes: 1,
+          _id: 0,
+        },
+      },
+      { $sort: { city: 1, state: 1, country: 1 } },
+      { $limit: 5 },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Data fetched successfully",
+      cities,
+      carriers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/external/carrier-search-for-review", async (req, res) => {
+  try {
+    const { page = 1, limit = 10, sort = "dotNumber", order = "asc", q = req.query.q = "" } = req.query;
+
+    const sortOrder = order === "asc" ? 1 : -1;
+
+    const carrierFilterConditions = {
+      $or: [
+        { dotNumber: { $regex: q, $options: "i" } },
+        { legalName: { $regex: q, $options: "i" } },
+      ],
+    };
+
+    const [totalCount, carriers] = await Promise.all([
+      Carrier.countDocuments(carrierFilterConditions),
+      Carrier.find(carrierFilterConditions)
+        .select("legalName dotNumber phyCity phyState phyCountry phyZip")
+        .sort({ [sort]: sortOrder })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean(),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.status(200).json({
+      success: true,
+      message: "Data fetched successfully",
+      totalPages,
+      totalCount,
+      currentPage: parseInt(page),
+      carriers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
