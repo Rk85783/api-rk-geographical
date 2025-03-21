@@ -730,5 +730,21 @@ app.delete("/api/lists/:listId/carriers/:carrierId", authenticate, authorize(["c
   }
 });
 
+app.post("/api/auth/change-password", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { email } = req.user;
+  const { newPassword } = req.body;
+  try {
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });    
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(newPassword, salt);
+    user.password = hash;
+    user.save();
+    res.status(200).json({ success: true, message: "Password changed successfully" });
+  } catch (error) {
+    res.status(200).json({ success: true, message: "Internal server error", error: error.message, stack: error.stack });
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
