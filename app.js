@@ -437,7 +437,7 @@ app.post("/api/auth/reset-password", async (req, res) => {
 });
 
 // -----> Profile
-app.get("/api/auth/profile", authenticate, authorize(["user"]), async (req, res) => {
+app.get("/api/auth/profile", authenticate, authorize(["user", "carrier", "shipper"]), async (req, res) => {
   try {
     const user = req.user;
     res.status(200).json({ success: true, message: "User details fetched successfully", user });
@@ -571,6 +571,12 @@ app.get("/api/external/carrier-search-for-review", async (req, res) => {
         { legalName: { $regex: q, $options: "i" } },
       ],
     };
+
+    if (!isNaN(Number(q))) {
+      carrierFilterConditions.$or.push({ dotNumber: Number(q) });
+    }
+
+    console.dir(carrierFilterConditions, { depth: null });
 
     const [totalCount, carriers] = await Promise.all([
       Carrier.countDocuments(carrierFilterConditions),
