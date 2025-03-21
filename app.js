@@ -480,7 +480,7 @@ app.post("/api/auth/assign-role", authenticate, authorize(["user"]), async (req,
   }
 });
 
-// -----> Shipper Profile
+// -----> Get Shipper Profile
 app.get("/api/shippers/me", authenticate, authorize(["shipper"]), async (req, res) => {
   try {
     const user = req.user;
@@ -490,6 +490,78 @@ app.get("/api/shippers/me", authenticate, authorize(["shipper"]), async (req, re
     if (!shipper) return res.status(404).json({ success: false, message: "Shipper not found" });
 
     res.status(200).json({ success: true, message: "User details fetched successfully", shipper });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Update Shipper Profile
+app.put("/api/shippers/profile-update", authenticate, authorize(["shipper"]), async (req, res) => {
+  const user = req.user;
+  const { firstName, lastName, companyName } = req.body;
+  try {
+    if (!user.isEmailVerified) return res.status(404).json({ success: false, message: "Please verify email first" });
+
+    const shipper = await Shipper.findOne({ user: user._id }).populate({
+      path: "user",
+      match: { role: "shipper" },
+      select: "firstName lastName email role",
+      lean: true,
+    }).lean();
+
+    if (!shipper) return res.status(404).json({ success: false, message: "Shipper not found" });
+
+    await Promise.all([
+      Shipper.findOneAndUpdate(
+        { _id: shipper._id },
+        { companyName }
+      ),
+      User.findOneAndUpdate(
+        { _id: shipper.user._id },
+        { firstName, lastName }
+      ),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully"
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// -----> Update Carrier Profile
+app.put("/api/carriers/profile-update", authenticate, authorize(["carrier"]), async (req, res) => {
+  const user = req.user;
+  const { firstName, lastName, companyName } = req.body;
+  try {
+    if (!user.isEmailVerified) return res.status(404).json({ success: false, message: "Please verify email first" });
+
+    const carrier = await Carrier.findOne({ user: user._id }).populate({
+      path: "user",
+      match: { role: "carrier" },
+      select: "firstName lastName email role",
+      lean: true,
+    }).lean();
+
+    if (!carrier) return res.status(404).json({ success: false, message: "Carrier not found" });
+
+    await Promise.all([
+      Carrier.findOneAndUpdate(
+        { _id: carrier._id },
+        { companyName }
+      ),
+      User.findOneAndUpdate(
+        { _id: carrier.user._id },
+        { firstName, lastName }
+      ),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully"
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
@@ -735,7 +807,7 @@ app.post("/api/auth/change-password", authenticate, authorize(["carrier", "shipp
   const { newPassword } = req.body;
   try {
     const user = await User.findOne({ email }).select('+password');
-    if (!user) return res.status(400).json({ success: false, message: "User not found" });    
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(newPassword, salt);
     user.password = hash;
