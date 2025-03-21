@@ -14,6 +14,8 @@ import { fileURLToPath } from 'url';
 import Shipper from "./models/Shipper.js";
 import Carrier from "./models/Carrier.js";
 import List from "./models/List.js";
+import Contact from "./models/Contact.js";
+import Blog from "./models/Blog.js";
 
 const app = express();
 
@@ -550,7 +552,7 @@ app.put("/api/carriers/profile-update", authenticate, authorize(["carrier"]), as
     await Promise.all([
       Carrier.findOneAndUpdate(
         { _id: carrier._id },
-        { companyName }
+        { legalName: companyName }
       ),
       User.findOneAndUpdate(
         { _id: carrier.user._id },
@@ -815,6 +817,93 @@ app.post("/api/auth/change-password", authenticate, authorize(["carrier", "shipp
     res.status(200).json({ success: true, message: "Password changed successfully" });
   } catch (error) {
     res.status(200).json({ success: true, message: "Internal server error", error: error.message, stack: error.stack });
+  }
+});
+
+// --------------> Contact
+app.post("/api/contact", async (req, res) => {
+  const { firstName, lastName, companyName, email, message, role, isSubscribed } = req.body;
+  try {
+    await Contact.create({ firstName, lastName, companyName, email, message, role, isSubscribed });
+    res.status(200).json({ success: true, message: "Email sent successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// --------------> Blogs
+app.post("/api/blogs", authenticate, authorize(["admin"]), async (req, res) => {
+  const { title, content, tags, isPublished, featuredImage } = req.body;
+  try {
+    const blog = await Blog.create({
+      title,
+      content,
+      author: req.user._id,
+      tags,
+      isPublished,
+      publishedAt: isPublished ? new Date() : null,
+      featuredImage
+    });
+    res.status(200).json({ success: true, message: "Blog created successfully", blog });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.get("/api/blogs", async (req, res) => {
+  try {
+    const blogs = await Blog.find().populate("author", "firstName lastName email role").lean();
+    res.status(200).json({ success: true, message: "Blogs fetched successfully", blogs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.get("/api/blogs/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const blog = await Blog.findOne({ _id: id }).populate("author", "firstName lastName email role").lean();
+    if (!blog) return res.status(404).json({ success: false, message: "Blog not found" });
+    res.status(200).json({ success: true, message: "Blog fetched successfully", blog });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.put("/api/blogs/:id", authenticate, authorize(["admin"]), async (req, res) => {
+  const { id } = req.params;
+  const { title, content, tags, isPublished, featuredImage } = req.body;
+  try {
+    const updatedBlog = await Blog.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          title,
+          content,
+          author: req.user._id,
+          tags,
+          isPublished,
+          publishedAt: isPublished ? new Date() : null,
+          featuredImage
+        }
+      },
+      { new: true }
+    ).lean();
+    if (!updatedBlog) return res.status(404).json({ success: false, message: "Blog not found" });
+    res.status(200).json({ success: true, message: "Blog updated successfully", updatedBlog });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.delete("/api/blogs/:id", authenticate, authorize(["admin"]), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deletedBlog = await Blog.findOneAndDelete({ _id: id }).lean();
+    if (!deletedBlog) return res.status(404).json({ success: false, message: "Blog not found" });
+    res.status(200).json({ success: true, message: "Blog deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
 
