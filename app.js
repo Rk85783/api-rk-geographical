@@ -822,10 +822,10 @@ app.post("/api/auth/change-password", authenticate, authorize(["carrier", "shipp
 
 // --------------> Contact
 app.post("/api/contact", async (req, res) => {
-  const { firstName, lastName, companyName, email, message, role, isSubscribed } = req.body;
+  const { firstName, lastName, companyName, email, message, role, consent: isSubscribed } = req.body;
   try {
     await Contact.create({ firstName, lastName, companyName, email, message, role, isSubscribed });
-    res.status(200).json({ success: true, message: "Email sent successfully" });
+    res.status(201).json({ success: true, message: "Contact form submitted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
@@ -851,13 +851,43 @@ app.post("/api/blogs", authenticate, authorize(["admin"]), async (req, res) => {
 });
 
 app.get("/api/blogs", async (req, res) => {
+  const { page = 1, limit = 10, sort = "publishedAt", order = "desc", ...filters } = req.query;
+  const sortOrder = order === "asc" ? 1 : -1;
+
+  const filterConditions = {};
+  for (const [key, value] of Object.entries(filters)) {
+    if (key === "isPublished") {
+      filterConditions[key] = value === "true";
+    } else {
+      filterConditions[key] = new RegExp(value, "i");
+    }
+  }
+
+  const skip = (Math.max(0, page - 1)) * limit;
+
   try {
-    const blogs = await Blog.find().populate("author", "firstName lastName email role").lean();
-    res.status(200).json({ success: true, message: "Blogs fetched successfully", blogs });
+    const [totalCount, blogs] = await Promise.all([
+      Blog.countDocuments(filterConditions),
+      Blog.find(filterConditions)
+        .sort({ [sort]: sortOrder })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate("author", "firstName lastName email role")
+        .lean(),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+    res.status(200).json({
+      totalPages,
+      totalCount,
+      currentPage: parseInt(page),
+      blogs
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
 });
+
 
 app.get("/api/blogs/:id", async (req, res) => {
   const { id } = req.params;
