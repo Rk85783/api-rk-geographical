@@ -36,7 +36,9 @@ app.set('views', path.resolve(__dirname, 'views'));
 connectDB();
 
 // -----> Project info
-import { name, version, description, author, license } from "../package.json";
+import { readFileSync } from "fs";
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
+const { name, version, description, author, license } = packageJson;
 app.get("/api", async (req, res) => {
   res.status(200).json({ name, version, description, author, license });
 });
