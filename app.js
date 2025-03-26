@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { authenticate, authorize } from "./middlewares/auth.middleware.js";
 import { sendMail } from "./services/email.service.js";
-import { FORGOT_PASSWORD_MAIL, VERIFICATION_MAIL } from "./config/email.config.js";
+import { FORGOT_PASSWORD_MAIL, VERIFICATION0_MAIL_FOR_OTHER_EMAIL, VERIFICATION_MAIL } from "./config/email.config.js";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Shipper from "./models/Shipper.js";
@@ -16,6 +16,7 @@ import Carrier from "./models/Carrier.js";
 import List from "./models/List.js";
 import Contact from "./models/Contact.js";
 import Blog from "./models/Blog.js";
+import EmailAddress from "./models/EmailAddress.js";
 
 const app = express();
 
@@ -302,6 +303,7 @@ app.post("/api/auth/register", async (req, res) => {
       email,
       password: bcrypt.hashSync(password, 10)
     });
+    await EmailAddress.create({ user: user._id, email });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
@@ -368,9 +370,31 @@ app.post("/api/auth/verify-email", authenticate, authorize(["user"]), async (req
     user.isEmailVerified = true;
     await user.save();
 
+    await EmailAddress.updateOne({ email: user.email, user: user._id }, { $set: { isPrimary: true, isVerified: true } });
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.status(200).json({ success: true, message: "Email verified successfully", token, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+// -----> Verify Others Email
+app.post("/api/auth/verify-others-email", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { email, id } = req.body;
+  try {
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ success: false, message: "Invalid ID format" });
+    if (id != req.user._id) return res.status(400).json({ success: false, message: "Verification details and logged in users details not match" });
+
+    const emailAddress = await EmailAddress.findOne({ email, user: id });
+    if (!emailAddress) return res.status(400).json({ success: false, message: "User not found" });
+    if (emailAddress.isVerified) return res.status(400).json({ success: false, message: "Email is already verified" });
+
+    emailAddress.isVerified = true;
+    await emailAddress.save();
+
+    res.status(200).json({ success: true, message: "Email verified successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
@@ -650,8 +674,6 @@ app.get("/api/external/carrier-search-for-review", async (req, res) => {
       carrierFilterConditions.$or.push({ dotNumber: Number(q) });
     }
 
-    console.dir(carrierFilterConditions, { depth: null });
-
     const [totalCount, carriers] = await Promise.all([
       Carrier.countDocuments(carrierFilterConditions),
       Carrier.find(carrierFilterConditions)
@@ -888,7 +910,6 @@ app.get("/api/blogs", async (req, res) => {
   }
 });
 
-
 app.get("/api/blogs/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -932,6 +953,72 @@ app.delete("/api/blogs/:id", authenticate, authorize(["admin"]), async (req, res
     const deletedBlog = await Blog.findOneAndDelete({ _id: id }).lean();
     if (!deletedBlog) return res.status(404).json({ success: false, message: "Blog not found" });
     res.status(200).json({ success: true, message: "Blog deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.post("/api/email-address", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { email } = req.body;
+
+  try {
+    const existingEmailInUser = await User.findOne({ email }).lean().exec();
+    const existingEmailInEmailAddress = await EmailAddress.findOne({ email }).lean().exec();
+
+    if (existingEmailInUser || existingEmailInEmailAddress) return res.status(400).json({ success: false, message: "Email already exists, Please try different email" });
+
+    const newEmailAddress = await EmailAddress.create({ email, user: user._id });
+
+    const emailData = {
+      recieverEmail: newEmailAddress.email,
+      subject: `Verify Your Email on ${process.env.APP_NAME}`,
+      emailTemplatePath: VERIFICATION0_MAIL_FOR_OTHER_EMAIL,
+      templateData: {
+        appName: process.env.APP_NAME,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${newEmailAddress.email}&id=${newEmailAddress.user}`
+      }
+    }
+    sendMail(emailData);
+
+    res.status(201).json({ success: true, message: "Email added successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message, stack: error.stack });
+  }
+});
+
+app.get("/api/email-address", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  try {
+    const emailAddresses = await EmailAddress.find({ user: user._id }).sort({ isPrimary: -1, createdAt: -1 }).lean();
+    res.status(200).json({ success: true, message: "Email addresses fetched successfully", emailAddresses });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+app.put("/api/email-address/:emailId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { emailId } = req.params;
+  try {
+    const emailAddress = await EmailAddress.findOne({ _id: emailId, user: user._id }).lean();
+    if (!emailAddress) return res.status(404).json({ success: false, message: "Email not found" });
+    if (!emailAddress.isVerified) return res.status(404).json({ success: false, message: "Email not verified yet" });
+
+    await EmailAddress.updateMany(
+      { user: user._id },
+      { $set: { isPrimary: false } }
+    );
+
+    const updatedEmail = await EmailAddress.findByIdAndUpdate(
+      emailId,
+      { $set: { isPrimary: true } },
+      { new: true }
+    ).lean();
+
+    res.status(200).json({ success: true, message: "Email set to primary successfully", updatedEmail });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
