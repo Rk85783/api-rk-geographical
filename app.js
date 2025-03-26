@@ -1032,5 +1032,27 @@ app.put("/api/email-address/:emailId", authenticate, authorize(["carrier", "ship
   }
 });
 
+app.delete("/api/email-address/:emailId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const user = req.user;
+  const { emailId } = req.params;
+  try {
+    const emailAddress = await EmailAddress.findOne({ _id: emailId, user: user._id }).lean();
+    if (!emailAddress) return res.status(404).json({ success: false, message: "Email not found" });
+
+    await EmailAddress.findOneAndDelete(
+      {
+        user: user._id,
+        $ne: {
+          isPrimary: true
+        }
+      }
+    );
+
+    res.status(200).json({ success: true, message: "Email deleted successfully", updatedEmail });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
