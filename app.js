@@ -986,7 +986,7 @@ app.post("/api/email-address", authenticate, authorize(["carrier", "shipper"]), 
         appName: process.env.APP_NAME,
         firstName: user.firstName,
         lastName: user.lastName,
-        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/verify?email=${newEmailAddress.email}&id=${newEmailAddress.user}`
+        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/verify-others-email?email=${newEmailAddress.email}&id=${newEmailAddress.user}`
       }
     }
     sendMail(emailData);
