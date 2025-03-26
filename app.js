@@ -323,7 +323,7 @@ app.post("/api/auth/register", async (req, res) => {
         appName: process.env.APP_NAME,
         firstName: user.firstName,
         lastName: user.lastName,
-        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${user.email}&id=${user._id}`
+        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/verify?email=${user.email}&id=${user._id}`
       }
     }
     sendMail(emailData);
@@ -350,7 +350,7 @@ app.post("/api/auth/resend-verification-mail", authenticate, authorize(["user"])
         appName: process.env.APP_NAME,
         firstName: user.firstName,
         lastName: user.lastName,
-        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${email}&id=${_id}`
+        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/verify?email=${email}&id=${_id}`
       }
     }
     sendMail(emailData);
@@ -439,7 +439,7 @@ app.post("/api/auth/forgot-password", async (req, res) => {
       emailTemplatePath: FORGOT_PASSWORD_MAIL,
       templateData: {
         appName: process.env.APP_NAME,
-        verificationLink: `${process.env.FRONTEND_URL}/reset-password?email=${user.email}&id=${user._id}`
+        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/reset-password?email=${user.email}&id=${user._id}`
       }
     }
     sendMail(emailData);
@@ -986,7 +986,7 @@ app.post("/api/email-address", authenticate, authorize(["carrier", "shipper"]), 
         appName: process.env.APP_NAME,
         firstName: user.firstName,
         lastName: user.lastName,
-        verificationLink: `${process.env.FRONTEND_URL}/verify?email=${newEmailAddress.email}&id=${newEmailAddress.user}`
+        verificationLink: `${process.env.FRONTEND_LOCAL_URL}/verify?email=${newEmailAddress.email}&id=${newEmailAddress.user}`
       }
     }
     sendMail(emailData);
