@@ -1041,7 +1041,7 @@ app.delete("/api/email-address/:emailId", authenticate, authorize(["carrier", "s
 
     await EmailAddress.findOneAndDelete({ user: user._id, isPrimary: false });
 
-    res.status(200).json({ success: true, message: "Email deleted successfully", updatedEmail });
+    res.status(200).json({ success: true, message: "Email deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
   }
