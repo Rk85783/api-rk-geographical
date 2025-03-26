@@ -1039,14 +1039,7 @@ app.delete("/api/email-address/:emailId", authenticate, authorize(["carrier", "s
     const emailAddress = await EmailAddress.findOne({ _id: emailId, user: user._id }).lean();
     if (!emailAddress) return res.status(404).json({ success: false, message: "Email not found" });
 
-    await EmailAddress.findOneAndDelete(
-      {
-        user: user._id,
-        $ne: {
-          isPrimary: true
-        }
-      }
-    );
+    await EmailAddress.findOneAndDelete({ user: user._id, isPrimary: false });
 
     res.status(200).json({ success: true, message: "Email deleted successfully", updatedEmail });
   } catch (error) {
