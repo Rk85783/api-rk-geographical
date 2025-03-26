@@ -35,6 +35,12 @@ app.set('views', path.resolve(__dirname, 'views'));
 // Database Connection
 connectDB();
 
+// -----> Project info
+app.get("/api", async (req, res) => {
+  const { name, version, description, author, license } = require("../package.json");
+  res.status(200).json({ name, version, description, author, license });
+});
+
 // -----> configs-list
 app.get("/api/configs-list", async (req, res) => {
   try {
