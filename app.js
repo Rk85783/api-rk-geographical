@@ -36,8 +36,8 @@ app.set('views', path.resolve(__dirname, 'views'));
 connectDB();
 
 // -----> Project info
+import { name, version, description, author, license } from "../package.json";
 app.get("/api", async (req, res) => {
-  const { name, version, description, author, license } = require("../package.json");
   res.status(200).json({ name, version, description, author, license });
 });
 
