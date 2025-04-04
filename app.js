@@ -37,6 +37,8 @@ connectDB();
 
 // -----> Project info
 import { readFileSync } from "fs";
+import RecentView from "./models/RecentView.js";
+import Review from "./models/Review.js";
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
 const { name, version, description, author, license } = packageJson;
 app.get("/api", async (req, res) => {
@@ -418,7 +420,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ success: false, message: "Email or Password is Incorrect" });
     delete user.password
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.status(200).json({ success: true, message: "You are successfully logged in", token, user });
   } catch (error) {
@@ -1044,6 +1046,113 @@ app.delete("/api/email-address/:emailId", authenticate, authorize(["carrier", "s
     res.status(200).json({ success: true, message: "Email deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+  }
+});
+
+// ! Recent View
+app.post("/api/recent-view", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id } = req.user;
+  const { carrierId } = req.body;
+  try {
+    const recentView = await RecentView.findOneAndUpdate(
+      { user: _id, carrier: carrierId },
+      { $inc: { count: 1 } },
+      { new: true, upsert: true }
+    );
+    res.json({ success: true, message: "Recent view updated successfully", recentView });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+app.get("/api/recent-view", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id } = req.user;
+  try {
+    const recentViews = await RecentView.find({ user: _id }).populate("carrier").sort({ updatedAt: -1 }).lean();
+    res.json({ success: true, message: "Recent views fetched successfully", recentViews });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+app.delete("/api/recent-view/:carrierId", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id } = req.user;
+  const { carrierId } = req.params;
+  try {
+    const recentView = await RecentView.findOneAndDelete({ user: _id, carrier: carrierId });
+    if (!recentView) return res.status(404).json({ success: false, message: "Recent view not found" });
+    res.json({ success: true, message: "Recent view deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+// ! Review
+app.get("/api/review/config", async (req, res) => {
+  try {
+
+    // const fields = Object.keys(Review.schema.paths);
+    // console.log(fields);
+
+    const configs = ({
+      // fields
+      "When did you last work with this carrier?": {
+        month: [
+          "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+        ],
+        year: Array.from({ length: 7 }, (v, k) => new Date().getFullYear() - k)
+      },
+      "How did you find this carrier?": [
+        "DAT",
+        "truckstop.com",
+        "Other Load Board",
+        "Internal Database / TMS",
+        "CarrierSource",
+        "Other"
+      ],
+      "How was the carrier's rate?": [
+        "Below market rate",
+        "At market rate",
+        "Above market rate"
+      ],
+      "How often have you worked with this carrier?": [
+        "Once",
+        "2-10 times",
+        "More than 10 times"
+      ],
+      "Timeliness": Array.from({ length: 10 }, (v, k) => k + 1),
+      "Quality of Equipment": Array.from({ length: 10 }, (v, k) => k + 1),
+      "Communication": Array.from({ length: 10 }, (v, k) => k + 1),
+      "What type(s) of freight did you ship?": await mongoose.connection.db.collection("freight").find().sort({ id: 1 }).toArray(),
+      "What type(s) of truck did you use?": await mongoose.connection.db.collection("truck-type").find().sort({ id: 1 }).toArray(),
+      "What type(s) of shipments did this carrier take?": await mongoose.connection.db.collection("shipment-type").find().sort({ id: 1 }).toArray(),
+      "What specialized services did this carrier provide?": await mongoose.connection.db.collection("specialized-service").find().sort({ id: 1 }).toArray(),
+    })
+
+    res.json({ success: true, message: "Review updated successfully", configs });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
+app.post("/api/review", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
+  const { _id } = req.user;
+  const { carrierId, ...body } = req.body;
+  try {
+
+    const createValues = ({
+      user: _id,
+      carrier: carrierId,
+      ...body
+    })
+    console.log(createValues);
+    await Review.create(createValues);
+
+    res.json({ success: true, message: "Review updated successfully" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
 });
 
