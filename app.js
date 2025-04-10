@@ -18,6 +18,20 @@ import Contact from "./models/Contact.js";
 import Blog from "./models/Blog.js";
 import EmailAddress from "./models/EmailAddress.js";
 
+import multer from 'multer'
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, './uploads')
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + "-" + file.originalname)
+  }
+});
+const upload = multer({ storage: storage });
+const cpUpload = upload.fields([
+  { name: 'media', maxCount: 10 },
+]);
+
 const app = express();
 
 // Middlewares
@@ -35,10 +49,14 @@ app.set('views', path.resolve(__dirname, 'views'));
 // Database Connection
 connectDB();
 
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
+
 // -----> Project info
 import { readFileSync } from "fs";
 import RecentView from "./models/RecentView.js";
 import Review from "./models/Review.js";
+import { uploadMultipleMedia } from "./services/media.service.js";
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
 const { name, version, description, author, license } = packageJson;
 app.get("/api", async (req, res) => {
@@ -1156,5 +1174,16 @@ app.post("/api/review", authenticate, authorize(["carrier", "shipper"]), async (
   }
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
+
+import fs from 'fs/promises'
+
+// File Upload
+app.post("/api/media", authenticate, authorize(["carrier", "shipper"]), cpUpload, async (req, res) => {
+  try {
+    const result = await uploadMultipleMedia(req.files.media, { userId: req.user._id, role: req.user.role });
+    if (result.length > 0) await Promise.all(req.files.media.map(media => fs.unlink(media.path)));
+    res.status(200).json({ success: true, message: "Media uploaded successfully", result});
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
