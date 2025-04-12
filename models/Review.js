@@ -14,7 +14,7 @@ const reviewSchema = new Schema(
       month: { type: String, required: true },
       year: { type: Number, required: true }
     },
-    "How did you find this carrier?": { type: String },
+    "How did you find this carrier? (Optional)": { type: String },
     "How was the carrier's rate?": { type: String, required: true },
     "How often have you worked with this carrier?": { type: String, required: true },
     "What lanes did this carrier run?": [
@@ -35,7 +35,7 @@ const reviewSchema = new Schema(
     "Add a verification screenshot": String,
     "Is your brokerage related to this carrier in any way?": { type: Boolean, required: true },
     "Are you willing to be a reference for this carrier?": { type: Boolean, required: true },
-    "I would like my review to be anonymous.": { type: Boolean, required: true },
+    "I would like my review to be anonymous": { type: Boolean, required: true },
   },
   { timestamps: true }
 );

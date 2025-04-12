@@ -1148,7 +1148,7 @@ app.get("/api/review/config", async (req, res) => {
         ],
         year: Array.from({ length: 7 }, (v, k) => new Date().getFullYear() - k)
       },
-      "How did you find this carrier?": [
+      "How did you find this carrier? (Optional)": [
         "DAT",
         "truckstop.com",
         "Other Load Board",
