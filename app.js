@@ -1108,12 +1108,34 @@ app.delete("/api/recent-view/:carrierId", authenticate, authorize(["carrier", "s
 // ! Review
 app.get("/api/review/config", async (req, res) => {
   try {
-
-    // const fields = Object.keys(Review.schema.paths);
-    // console.log(fields);
-
     const configs = ({
-      // fields
+      "What went well": [
+        "On Time Pickup",
+        "On Time Delivery",
+        "Consistent Tracking",
+        "Strong Dispatcher Communication",
+        "Strong Driver Communication",
+        "Friendly",
+        "Easy to Work With",
+        "Easy to Onboard",
+        "Clean Equipment",
+        "Good Delivery Condition",
+        "Knowledgeable"
+      ],
+      "What went poorly": [
+        "Late Pickup",
+        "Late Delivery",
+        "Intermittent Tracking",
+        "Poor Dispatcher Communication",
+        "Poor Driver Communication",
+        "Unresponsive",
+        "Fraud Claim",
+        "Unresolved",
+        "Double Brokering",
+        "Poor Delivery Condition",
+        "Back Solicitation",
+        "Refusal to Release Load"
+      ],
       "When did you last work with this carrier?": {
         month: [
           "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
@@ -1154,6 +1176,34 @@ app.get("/api/review/config", async (req, res) => {
   }
 });
 
+app.get("/api/review/config/lane-search", async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+    // if (!search) return res.status(400).json({ success: false, message: "Search query is required" });
+
+    const filter = {
+      name: { $regex: search, $options: 'i' },
+    };
+
+    const laneResult = await City.aggregate([
+      { $match: filter },
+      { $sort: { name: 1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          cityName: "$name",
+          stateCode: "$state_code"
+        }
+      }
+    ]);
+
+    res.json({ success: true, message: "Review updated successfully", laneResult });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
+  }
+});
+
 app.post("/api/review", authenticate, authorize(["carrier", "shipper"]), async (req, res) => {
   const { _id } = req.user;
   const { carrierId, ...body } = req.body;
@@ -1176,13 +1226,14 @@ app.post("/api/review", authenticate, authorize(["carrier", "shipper"]), async (
 
 
 import fs from 'fs/promises'
+import City from "./models/City.js";
 
 // File Upload
 app.post("/api/media", authenticate, authorize(["carrier", "shipper"]), cpUpload, async (req, res) => {
   try {
     const result = await uploadMultipleMedia(req.files.media, { userId: req.user._id, role: req.user.role });
     if (result.length > 0) await Promise.all(req.files.media.map(media => fs.unlink(media.path)));
-    res.status(200).json({ success: true, message: "Media uploaded successfully", result});
+    res.status(200).json({ success: true, message: "Media uploaded successfully", result });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
