@@ -2,28 +2,34 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs/promises";
+import multer from "multer";
+import { readFileSync } from "fs";
+
 import connectDB from "./config/db.config.js";
-import User from "./models/User.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { authenticate, authorize } from "./middlewares/auth.middleware.js";
 import { sendMail } from "./services/email.service.js";
 import { FORGOT_PASSWORD_MAIL, VERIFICATION0_MAIL_FOR_OTHER_EMAIL, VERIFICATION_MAIL } from "./config/email.config.js";
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { uploadMultipleMedia } from "./services/media.service.js";
+
+import User from "./models/User.js";
 import Shipper from "./models/Shipper.js";
 import Carrier from "./models/Carrier.js";
 import List from "./models/List.js";
 import Contact from "./models/Contact.js";
 import Blog from "./models/Blog.js";
 import EmailAddress from "./models/EmailAddress.js";
-
-import multer from 'multer';
-import fs from 'fs/promises';
-
 import City from "./models/City.js";
+import RecentView from "./models/RecentView.js";
+import Review from "./models/Review.js";
 
-const uploadDir = path.resolve(__dirname, 'uploads');
+// __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadDir = path.resolve(__dirname, "uploads");
 
 // Ensure the uploads directory exists
 fs.mkdir(uploadDir, { recursive: true }).catch(console.error);
@@ -34,13 +40,11 @@ const storage = multer.diskStorage({
   },
   filename: function (_, file, cb) {
     cb(null, Date.now() + "-" + file.originalname);
-  }
+  },
 });
 
 const upload = multer({ storage: storage });
-const cpUpload = upload.fields([
-  { name: 'media', maxCount: 10 },
-]);
+const cpUpload = upload.fields([{ name: "media", maxCount: 10 }]);
 
 const app = express();
 
@@ -49,12 +53,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// __dirname equivalent in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 app.set("view engine", "ejs");
-app.set('views', path.resolve(__dirname, 'views'));
+app.set("views", path.resolve(__dirname, "views"));
 
 // Database Connection
 connectDB();
@@ -63,10 +63,6 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`App is running at http://localhost:${PORT}`));
 
 // -----> Project info
-import { readFileSync } from "fs";
-import RecentView from "./models/RecentView.js";
-import Review from "./models/Review.js";
-import { uploadMultipleMedia } from "./services/media.service.js";
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
 const { name, version, description, author, license } = packageJson;
 app.get("/api", async (req, res) => {
