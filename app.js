@@ -18,15 +18,25 @@ import Contact from "./models/Contact.js";
 import Blog from "./models/Blog.js";
 import EmailAddress from "./models/EmailAddress.js";
 
-import multer from 'multer'
+import multer from 'multer';
+import fs from 'fs';
+
+const uploadDir = path.resolve(__dirname, 'uploads');
+
+// Ensure the uploads directory exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, path.resolve(__dirname, 'uploads'))
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname)
+    cb(null, Date.now() + "-" + file.originalname);
   }
 });
+
 const upload = multer({ storage: storage });
 const cpUpload = upload.fields([
   { name: 'media', maxCount: 10 },
