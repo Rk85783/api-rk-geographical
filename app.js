@@ -19,20 +19,20 @@ import Blog from "./models/Blog.js";
 import EmailAddress from "./models/EmailAddress.js";
 
 import multer from 'multer';
-import fs from 'fs';
+import fs from 'fs/promises';
+
+import City from "./models/City.js";
 
 const uploadDir = path.resolve(__dirname, 'uploads');
 
 // Ensure the uploads directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+fs.mkdir(uploadDir, { recursive: true }).catch(console.error);
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: function (_, __, cb) {
     cb(null, uploadDir);
   },
-  filename: function (req, file, cb) {
+  filename: function (_, file, cb) {
     cb(null, Date.now() + "-" + file.originalname);
   }
 });
@@ -1233,10 +1233,6 @@ app.post("/api/review", authenticate, authorize(["carrier", "shipper"]), async (
     res.status(500).json({ success: false, message: "Internal server error", error: { message: error.message, stack: error.stack } });
   }
 });
-
-
-import fs from 'fs/promises'
-import City from "./models/City.js";
 
 // File Upload
 app.post("/api/media", authenticate, authorize(["carrier", "shipper"]), cpUpload, async (req, res) => {
